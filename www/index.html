@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>WiBox</title>
+	<link rel="stylesheet" href="css/jquery.mobile-1.4.5.min.css">
+	<style>
+		.ui-icon-myfolder:after {
+			background-image: url("img/folder.png");
+		}
+	</style>
+	<script src="js/jquery-1.11.3.min.js"></script>
+	<script src="js/jquery.mobile.router.min.js"></script>
+	<script src="js/jquery.mobile-1.4.5.min.js"></script>
+	
+	<script type="text/javascript" charset="utf-8">
+	// Wait for device API libraries to load
+	document.addEventListener("deviceready", onDeviceReady, false);
+
+	// device APIs are available
+	function onDeviceReady() {
+		var element = document.getElementById('deviceProperties');
+		element.innerHTML = 'Device Model: '    + device.model    + '<br />' +
+							'Device Cordova: '  + device.cordova  + '<br />' +
+							'Device Platform: ' + device.platform + '<br />' +
+							'Device UUID: '     + device.uuid     + '<br />' +
+							'Device Version: '  + device.version  + '<br />';
+	}
+	</script>
+	<script src="js/md5.js"></script>
+	<script src="js/enc-base64-min.js"></script>
+	<script src="js/wibox.js"></script>
+	<script type="text/javascript">
+		var router=new $.mobile.Router([
+		  { "#folderview(?:[?/](.*))?": { handler: "folderviewBeforeShow", events: "bs" } }
+		], {
+			folderviewBeforeShow: function(type,match,ui){
+				var params = router.getParams(match[1]);
+				//console.log("folderviewBeforeShow: "+type);
+				//console.log(params);
+				var cwd = params.folder.replace(/\|/g, '/');	// replace all '|' with '/'
+				//console.log(params.token);
+				var fakecwd = params.folder.replace(/\|/g, '_');	// replace all '|' with '_'
+				$("#CurrentWorkingDirectory").html( cwd );
+				
+				$("#cwdEntries").empty();	// Remove all child nodes
+			//	$("#nextpage").attr("href", "#localpage2?folder=" + params.folder + "|sub");
+				$.ajax(wiboxurl + cwd, {	// real
+			//	$.ajax("fakedata/"+fakecwd+".xml", {	// fake
+					headers : {
+					//	"User-Agent": "WiBox/2.0",
+					//	"Connection": "Keep-Alive",
+						"X-Auth-Token": authToken,
+					//	"Cache-Control": "no-cache",
+						"X-Op": "list",
+						"X-Prop": "size, md5, time, id"
+					}
+				}).complete(function(jqXHR, textStatus) {
+					//console.log("Done fetching: " + this.url);
+					if (textStatus == "success" && jqXHR.status == "200" && jqXHR.getResponseHeader("X-Status") == "0") {	// real
+				//	if (jqXHR.status == "200") {	// fake
+						xmlDoc = jqXHR.responseXML;
+						// Populate folder nodes first
+						node = xmlDoc.documentElement.firstChild;
+						while ( node ) {
+							if (node.nodeName=='d') {
+								var folderPath = params.folder + node.getAttribute('n') + "|";
+								$("#cwdEntries").append('<li><a href="#folderview?folder='+folderPath+'" data-transition="slide" class="ui-btn ui-btn-icon-right ui-icon-carat-r"><img src="img/folder.svg" style="width:60px; height:60px; vertical-align:middle; margin-right:8px"/>'+node.getAttribute('n')+'</a></li>');
+							}
+							node = node.nextSibling;
+						}
+						// Populate file nodes
+						node = xmlDoc.documentElement.firstChild;
+						while ( node ) {
+							if (node.nodeName=='f') {
+								var filename = node.getAttribute('n');
+								var filePath = params.folder + filename;
+								var str = '<li><a href="#fileview?file='+filePath+'" data-transition="pop" class="ui-btn ui-btn-icon-right ui-icon-carat-r">';
+								var thumbnail = createThumbnailLink(cwd, filename);
+								var str2 = '<img src="' +thumbnail+ '" style="width:60px; height:60px; vertical-align:middle; margin-right:8px"/>';
+								$("#cwdEntries").append(str+str2+filename+'</a></li>');
+							}
+							node = node.nextSibling;
+						}
+					} else {
+						console.log( "Error fetching filelist: " + jqXHR.status + " " + textStatus + " X-Status=" + jqXHR.getResponseHeader("X-Status") );
+					}
+				});
+				
+			}
+		});
+	</script>
+	<script type="text/javascript">
+		function click_login() {
+			if ( loginWiBox($("#usr").val().trim(), $("#pwd").val()) ) {
+				// script method to follow the link:
+				// $(":mobile-pagecontainer") = $.mobile.pageContainer = $("body")
+				$("body").pagecontainer("change", "#folderview?folder=|&token="+authToken, {transition:"slide"});
+			} else {
+				alert("Invalid username or password.");
+			}
+		}
+	</script>
+</head>
+<body>
+	<div data-role="page" id="index">
+		<div data-role="header">
+			<div style="text-align:center; margin-top:10px;"><img src="img/wiboxlogo.png" /></div>
+<!--			<h1>WiBox</h1>-->
+		</div>
+		<div data-role="content">
+			<div style="text-align:center; margin-top:10px;"><img src="img/wiboxlogo.png" /></div>
+			<form>
+				<input id="usr" type="text" data-clear-btn="true" placeholder="Account" />
+				<input id="pwd" type="password" data-clear-btn="true" placeholder="Password" />
+				<div style="text-align:center;" ><a class="ui-btn ui-corner-all ui-shadow ui-btn-inline ui-btn-b" href="#" data-transition="slide" onclick="click_login(); return false;">Login</a></div>
+			</form>
+		</div>
+		<p id="deviceProperties" style="text-align:center; margin-top:150px;">Loading device properties...</p>
+		<div data-role="footer">
+			<h4>Copyright © 2015, Wistron Corp. All rights reserved.</h4>
+		</div>
+	</div>
+	<div data-role="page" id="folderview">
+		<div data-role="header">
+			<a href="#" class="ui-btn ui-corner-all ui-shadow ui-btn-inline ui-btn-b" data-rel="back">Back</a>
+			<h1>WiBox</h1>
+		</div>
+		<div data-role="content">
+			<p id="CurrentWorkingDirectory">Folder View</p>
+			<ul data-role="listview" data-inset="true" data-filter="true" id="cwdEntries">
+				<li><a href="#">Acura</a></li>
+				<li><a href="#">Audi</a></li>
+				<li><a href="#">BMW</a></li>
+				<li><a href="#">Cadillac</a></li>
+				<li><a href="#">Ferrari</a></li>
+			</ul>
+			<form>
+				<label for="slider-0">Input slider:</label>
+				<input type="range" name="slider" id="slider-0" value="25" min="0" max="100" />
+			</form>
+			<a href="#" data-role="button" data-icon="star">Star button</a>
+			<a href="#" class="ui-btn ui-shadow ui-corner-all ui-icon-delete ui-btn-icon-left">Delete</a>
+		</div>
+		<div data-role="footer">
+		</div>
+	</div>
+	<script src="cordova.js"></script>	// Don't miss this.
+</body>
+</html>
