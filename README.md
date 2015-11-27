@@ -2,7 +2,7 @@
 WiBox client side program. Multiple platformed mobile app.
 
 ## SOP:
-Follow the steps.
+Follow the steps. Follow!
 
 	git clone
 	cordova platform add android
